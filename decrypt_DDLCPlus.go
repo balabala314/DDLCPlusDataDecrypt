@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 )
 
@@ -16,6 +15,8 @@ const (
 	decryptSuccess = "- Done! Decrypted file is output to %s.\n"
 )
 
+var fileOutput *os.File
+
 func xorString(data []byte, key byte) []byte {
 	result := make([]byte, len(data))
 	for i := range data {
@@ -25,6 +26,7 @@ func xorString(data []byte, key byte) []byte {
 }
 
 func main() {
+	var data []byte
 	args := os.Args
 	if len(args) < 2 {
 		fmt.Printf(usageMessage, args[0])
@@ -44,8 +46,22 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	data, err := ioutil.ReadFile(inputFile)
+	_, err := os.Stat(outputFile)
+	if err == nil {
+		var ans string
+		fmt.Printf("File %s already exist, run anyway?(y,n)")
+		fmt.Scan(&ans)
+		if ans == "y" || ans == "Y" {
+			err = os.Remove(outputFile)
+			if err != nil{
+				fmt.Println("Failed to operate!")
+				os.Exit(1)
+			}
+		}else{
+			os.Exit(1)
+		}
+	}
+	data, err = os.ReadFile(inputFile)
 	if err != nil {
 		fmt.Printf(fileOpenErr, err)
 		os.Exit(1)
@@ -55,7 +71,13 @@ func main() {
 	fmt.Printf("- File size: %d Bytes.\n", len(data))
 	fmt.Printf("- Cache size: %d Bytes.\n", cacheCapacity)
 
-	var decryptedData []byte
+	fileOutput, err = os.Create(outputFile)
+	if err != nil{
+		fmt.Printf("Failed to create file %s\n", outputFile)
+		os.Exit(1)
+	}
+	defer fileOutput.Close()
+	
 	for i := 0; i < len(data); i += cacheCapacity {
 		end := i + cacheCapacity
 		if end > len(data) {
@@ -63,16 +85,9 @@ func main() {
 		}
 		chunk := data[i:end]
 		decryptedChunk := xorString(chunk, key)
-		decryptedData = append(decryptedData, decryptedChunk...)
+		_, err = fileOutput.Write(decryptedChunk)
 		fmt.Println("- Decrypting cached data...")
 	}
-
-	err = ioutil.WriteFile(outputFile, decryptedData, 0644)
-	if err != nil {
-		fmt.Printf(fileOpenErr, err)
-		os.Exit(1)
-	}
-
 	fmt.Printf(decryptSuccess, outputFile)
 }
 
